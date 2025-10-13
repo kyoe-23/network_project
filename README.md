@@ -9,6 +9,8 @@
 - **인터랙티브 데이터 시각화** - Chart.js 기반 그래프
 - **최적 채널 추천** - AP 분포 기반 알고리즘
 - **반응형 웹 UI** - 모바일 및 데스크톱 지원
+- **환경 변수 설정** - 유연한 구성 관리
+- **Mock 데이터 지원** - 테스트 및 개발용
 
 ## 시스템 요구사항
 
@@ -40,7 +42,37 @@ cd backend
 npm install
 ```
 
-### 3. 서버 실행
+### 3. 환경 변수 설정 (선택사항)
+
+```bash
+# .env 파일 복사
+cp .env.example .env
+
+# 필요에 따라 .env 파일 수정
+vi .env
+```
+
+기본 설정:
+```env
+PORT=5001
+HOST=0.0.0.0
+NODE_ENV=development
+PYTHON_COMMAND=python3
+CORS_ORIGIN=*
+SCAN_TIMEOUT=15
+WIFI_INTERFACE_NAME=    # 비워두면 자동 감지
+USE_MOCK_DATA=false     # 테스트용 Mock 데이터 사용 여부
+```
+
+**Mock 데이터 사용 (개발/테스트용):**
+실제 Wi-Fi 스캔 없이 미리 정의된 네트워크 목록으로 테스트할 수 있습니다:
+```env
+USE_MOCK_DATA=true
+```
+
+Mock 데이터에는 KT, SK, U+ 등 일반적인 한국 Wi-Fi 네트워크 15개가 포함되어 있습니다.
+
+### 4. 서버 실행
 
 ```bash
 # 프로덕션 모드
@@ -50,10 +82,10 @@ npm start
 npm run dev
 ```
 
-### 4. 브라우저에서 접속
+### 5. 브라우저에서 접속
 
 ```
-http://localhost:5000
+http://localhost:5001
 ```
 
 ## 프로젝트 구조
@@ -61,6 +93,9 @@ http://localhost:5000
 ```
 network_project/
 ├── backend/                    # 백엔드 서버
+│   ├── .env                   # 환경 변수 (git에서 제외)
+│   ├── .env.example           # 환경 변수 예제
+│   ├── .gitignore             # Git 제외 파일 목록
 │   ├── package.json           # Node.js 의존성 및 스크립트
 │   └── src/
 │       ├── server.js          # Express.js 서버
@@ -86,14 +121,14 @@ network_project/
          │ HTTP REST API
          ▼
 ┌─────────────────┐
-│  Node.js 서버   │  Express.js (포트 5000)
-│  backend/src/   │
+│  Node.js 서버   │  Express.js (포트 5001)
+│  backend/src/   │  환경 변수 기반 설정
 └────────┬────────┘
-         │ child_process.spawn()
+         │ child_process.spawn() + 환경 변수 전달
          ▼
 ┌─────────────────┐
 │ Python 스캐너   │  플랫폼별 CLI 명령어 실행
-│ wifi_scanner.py │
+│ wifi_scanner.py │  Wi-Fi 인터페이스 자동 감지 (Windows)
 └────────┬────────┘
          │
          ▼
@@ -102,15 +137,14 @@ network_project/
 └─────────────────┘
 ```
 
-### 데이터 흐름
+### 주요 개선사항
 
-1. 사용자가 브라우저에서 스캔 버튼 클릭
-2. 프론트엔드가 `/api/scan` 호출
-3. Express 서버가 Python 서브프로세스 실행
-4. Python이 플랫폼별 시스템 명령어 실행
-5. Python이 출력 파싱 후 JSON 반환
-6. Node.js가 JSON을 프론트엔드로 전달
-7. 프론트엔드가 차트와 테이블 렌더링
+1. **환경 변수 지원**: 하드코딩 제거, `.env` 파일로 설정 관리
+2. **자동 인터페이스 감지**: Windows에서 Wi-Fi 인터페이스 자동 감지
+3. **향상된 로깅**: 구조화된 로그 메시지 (`[TAG] message`)
+4. **더 나은 오류 처리**: 사용자 친화적인 한국어 오류 메시지
+5. **서버 바인딩 개선**: `0.0.0.0`으로 바인딩하여 외부 접속 허용
+6. **Graceful Shutdown**: SIGTERM/SIGINT 시그널 처리
 
 ## API 엔드포인트
 
@@ -124,8 +158,10 @@ network_project/
 ```json
 {
   "status": "ok",
-  "timestamp": "2025-10-13T05:25:00.000Z",
-  "platform": "darwin"
+  "timestamp": "2025-10-13T08:54:50.986Z",
+  "platform": "darwin",
+  "nodeVersion": "v22.20.0",
+  "environment": "development"
 }
 ```
 
@@ -136,26 +172,65 @@ Wi-Fi 네트워크 스캔 및 분석 결과 반환
 ```json
 {
   "networks": [
-    {"ssid": "MyNetwork", "channel": 6, "signal": 75},
-    {"ssid": "NeighborWiFi", "channel": 6, "signal": 45}
+    {
+      "ssid": "MyNetwork",
+      "channel": 6,
+      "signal": 75
+    },
+    {
+      "ssid": "NeighborWiFi",
+      "channel": 6,
+      "signal": 45
+    }
   ],
-  "channel_usage": {"1": 1, "6": 2, "11": 0},
+  "channel_usage": {
+    "1": 1,
+    "6": 2,
+    "11": 0
+  },
   "recommended": 11,
-  "predicted": "15%"
+  "predicted": "15%",
+  "total_networks": 2,
+  "platform": "darwin"
 }
 ```
 
-**필드 설명:**
-- `networks`: 발견된 네트워크 목록
-  - `ssid`: 네트워크 이름
-  - `channel`: 채널 번호
-  - `signal`: 신호 강도 (0-100%)
-- `channel_usage`: 채널별 AP 개수
-- `recommended`: 추천 채널 번호
-- `predicted`: 추천 채널의 예상 혼잡도
-
 ### `GET /api/debug`
-시스템 디버깅 정보 반환
+시스템 디버깅 정보 및 환경 설정 반환
+
+**응답 예시:**
+```json
+{
+  "platform": "darwin",
+  "nodeVersion": "v22.20.0",
+  "cwd": "/Users/kyoe/network_project/backend",
+  "pythonScript": "/Users/kyoe/network_project/backend/src/wifi_scanner.py",
+  "config": {
+    "PORT": "5001",
+    "HOST": "0.0.0.0",
+    "PYTHON_COMMAND": "python3",
+    "CORS_ORIGIN": "*",
+    "SCAN_TIMEOUT": 10,
+    "NODE_ENV": "development",
+    "WIFI_INTERFACE_NAME": "auto-detect"
+  }
+}
+```
+
+## 환경 변수 설명
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `PORT` | `5001` | 서버 포트 번호 |
+| `HOST` | `0.0.0.0` | 서버 바인딩 주소 (0.0.0.0은 모든 인터페이스) |
+| `NODE_ENV` | `development` | 실행 환경 (development/production) |
+| `PYTHON_COMMAND` | `python3` | Python 실행 명령어 (Windows: `python`) |
+| `PYTHON_PATH` | `` | Python 실행 파일 절대 경로 (선택) |
+| `CORS_ORIGIN` | `*` | CORS 허용 origin (프로덕션에서는 제한 필요) |
+| `LOG_LEVEL` | `info` | 로그 레벨 |
+| `WIFI_INTERFACE_NAME` | `` | Wi-Fi 인터페이스 이름 (비워두면 자동 감지) |
+| `SCAN_TIMEOUT` | `15` | 스캔 타임아웃 (초 단위) |
+| `USE_MOCK_DATA` | `false` | Mock 데이터 사용 여부 (true/false) |
 
 ## 채널 추천 알고리즘
 
@@ -197,9 +272,9 @@ npm start
 # 콘솔에서 Python stdout/stderr 확인
 
 # API 엔드포인트 수동 테스트
-curl http://localhost:5000/api/health
-curl http://localhost:5000/api/scan
-curl http://localhost:5000/api/debug
+curl http://localhost:5001/api/health
+curl http://localhost:5001/api/scan
+curl http://localhost:5001/api/debug
 ```
 
 ### 프론트엔드 디버깅
@@ -219,22 +294,58 @@ WifiAnalyzer.scan();
 
 ## 문제 해결
 
+### 서버 접속이 안 됨
+
+**원인:**
+- 서버가 `localhost`에만 바인딩되어 있음
+- 방화벽 차단
+
+**해결:**
+1. `.env` 파일에서 `HOST=0.0.0.0` 설정 확인
+2. 방화벽에서 포트 5001 허용
+3. 브라우저에서 `http://localhost:5001` 또는 `http://[서버IP]:5001` 접속
+
+### 포트가 이미 사용 중
+
+**증상:** `Error: listen EADDRINUSE: address already in use`
+
+**해결:**
+```bash
+# 포트 사용 프로세스 확인 및 종료 (macOS/Linux)
+lsof -ti:5001 | xargs kill -9
+
+# Windows
+netstat -ano | findstr :5001
+taskkill /PID [PID번호] /F
+
+# 또는 다른 포트 사용
+# .env 파일에서 PORT=5002 로 변경
+```
+
 ### Python을 찾을 수 없음
 
-**증상:** "Failed to start Python process" 또는 "ENOENT" 오류
+**증상:** "Python을 찾을 수 없습니다" 오류
 
 **원인:** Python이 PATH에 없거나 잘못된 명령어 이름
 
 **해결:**
-`server.js:39`의 Python 명령어 수정:
-```javascript
-const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
-```
+1. Python 설치 확인:
+   ```bash
+   python3 --version  # macOS/Linux
+   python --version   # Windows
+   ```
 
-필요시 절대 경로 사용:
-```javascript
-const pythonCommand = '/usr/local/bin/python3';
-```
+2. `.env` 파일에서 Python 명령어 수정:
+   ```env
+   # macOS/Linux
+   PYTHON_COMMAND=python3
+
+   # Windows
+   PYTHON_COMMAND=python
+
+   # 또는 절대 경로 사용
+   PYTHON_COMMAND=/usr/local/bin/python3
+   ```
 
 ### Windows에서 스캔 결과가 비어있음
 
@@ -246,6 +357,24 @@ const pythonCommand = '/usr/local/bin/python3';
 1. PowerShell 또는 CMD를 "관리자 권한으로 실행"
 2. `cd backend && npm start`
 
+**또는** 자동 인터페이스 감지가 실패한 경우:
+```env
+# .env 파일에서 인터페이스 이름 지정
+WIFI_INTERFACE_NAME=Wi-Fi
+
+# 또는 한글 Windows
+WIFI_INTERFACE_NAME=무선 네트워크 연결
+```
+
+### 인터페이스 이름 확인 (Windows)
+
+```bash
+# 사용 가능한 Wi-Fi 인터페이스 확인
+netsh wlan show interfaces
+
+# 출력에서 "Name" 또는 "이름" 항목 확인
+```
+
 ### 차트가 렌더링되지 않음
 
 **증상:** 차트가 표시되지 않고 콘솔에 Chart.js 오류
@@ -253,7 +382,7 @@ const pythonCommand = '/usr/local/bin/python3';
 **원인:** Chart.js CDN 로드 실패 (오프라인 또는 네트워크 문제)
 
 **해결:**
-Chart.js를 로컬에 다운로드하여 사용:
+Chart.js를 로컬에 다운로드:
 ```bash
 cd frontend
 mkdir lib
@@ -263,17 +392,6 @@ curl -o lib/chart.js https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.
 `index.html` 수정:
 ```html
 <script src="lib/chart.js"></script>
-```
-
-### 한글 Windows에서 인코딩 오류
-
-**증상:** UnicodeDecodeError 또는 깨진 텍스트
-
-**원인:** cp949 인코딩 처리 실패
-
-**현재 구현:** Python 스캐너가 자동으로 cp949 → UTF-8 폴백 처리
-```python
-output.decode('cp949', errors='ignore')
 ```
 
 ## 코드 스타일
@@ -288,101 +406,54 @@ output.decode('cp949', errors='ignore')
 - 4칸 들여쓰기
 - snake_case 네이밍
 - 모든 함수에 docstring 작성
+- 환경 변수는 `os.environ.get()` 사용
 
 ### CSS
 - CSS 커스텀 속성(변수) 사용
 - BEM 스타일 네이밍 (예: `.card-title`)
 - 모바일 우선 반응형 디자인
 
-## 기능 확장
-
-### 새로운 플랫폼 추가
-
-`wifi_scanner.py`에 새 플랫폼 지원 추가:
-
-1. `detect_platform()`에 플랫폼 감지 추가
-2. `scan_networks_<platform>()` 함수 구현
-3. `(ssid, channel, signal)` 튜플 리스트 반환
-4. `scan_networks()` 디스패처에 추가
-
-### 새 API 엔드포인트 추가
-
-1. `server.js`에 `app.get()` 또는 `app.post()` 라우트 추가
-2. 적절한 HTTP 상태 코드와 함께 JSON 반환
-3. `frontend/js/app.js`의 `API_ENDPOINTS`에 추가
-4. 프론트엔드 핸들러 함수 구현
-
-### 채널 추천 로직 수정
-
-`wifi_scanner.py`의 `recommend_channel()` 함수 수정.
-
-**개선 아이디어:**
-- 신호 강도 가중치 적용
-- 채널 중첩 계산
-- 과거 혼잡도 데이터 활용
-- DFS 채널 회피 강화
-
-## 알려진 제한사항
-
-1. **관리자 권한 요구 (Windows)**: OS 보안 요구사항으로 우회 불가
-2. **단일 동시 스캔**: 한 번에 하나의 스캔만 실행 가능 (큐 메커니즘 없음)
-3. **CDN 의존성**: Chart.js를 CDN에서 로드 - 인터넷 연결 필요
-4. **데이터 미저장**: 스캔 결과가 메모리에만 존재 (영속성 없음)
-5. **고정 인터페이스 이름**: Windows 버전이 "Wi-Fi" 인터페이스 이름 하드코딩
-
 ## 프로덕션 배포
-
-**현재 상태로 프로덕션 사용 금지.** 다음 보안 강화가 필요합니다:
 
 ### 필수 변경사항
 
-1. **프로덕션 서버 사용**
+1. **환경 변수 설정**
+   ```env
+   NODE_ENV=production
+   HOST=0.0.0.0
+   PORT=80
+   CORS_ORIGIN=https://yourdomain.com
+   ```
+
+2. **프로세스 관리자 사용**
    ```bash
    npm install pm2 -g
    pm2 start backend/src/server.js --name wifi-analyzer
+   pm2 startup
+   pm2 save
    ```
 
-2. **CORS 제한**
-   ```javascript
-   app.use(cors({
-     origin: 'https://yourdomain.com'
-   }));
-   ```
+3. **HTTPS 적용**
+   - Nginx 또는 Apache 리버스 프록시 사용
+   - Let's Encrypt 인증서 발급
 
-3. **Rate Limiting 추가**
-   ```bash
-   npm install express-rate-limit
-   ```
-
-4. **HTTPS 사용**
-   - SSL/TLS 인증서 적용
-   - HTTP → HTTPS 리다이렉션
-
-5. **로깅 시스템**
-   ```bash
-   npm install winston
-   ```
-
-6. **환경 변수 관리**
-   ```bash
-   # .env 파일 생성
-   PORT=5000
-   NODE_ENV=production
-   ```
-
-7. **요청 검증**
+4. **보안 강화**
+   - CORS origin 제한
+   - Rate limiting 추가 (express-rate-limit)
+   - Helmet.js로 보안 헤더 추가
    - Input validation
-   - Request sanitization
 
-8. **모니터링 및 알림**
+5. **모니터링**
+   - PM2 모니터링: `pm2 monit`
+   - 로그 확인: `pm2 logs wifi-analyzer`
    - Health check 엔드포인트 활용
-   - 에러 추적 시스템
 
 ## 기술 스택
 
 ### 백엔드
 - **Node.js** - 서버 런타임 환경
 - **Express.js** - 웹 프레임워크
+- **dotenv** - 환경 변수 관리
 - **Python 3** - Wi-Fi 스캐닝 유틸리티
 - **child_process** - Python 스크립트 실행
 
@@ -409,6 +480,6 @@ MIT License
 ---
 
 **마지막 업데이트:** 2025-10-13
-**버전:** 1.0.0
+**버전:** 2.0.0
 **아키텍처:** Node.js + Python + Vanilla JavaScript
 **UI 언어:** 한국어
