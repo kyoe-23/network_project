@@ -4,127 +4,420 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Wi-Fi channel analyzer and optimizer tool for Windows that scans nearby wireless networks, analyzes channel congestion, and recommends optimal channels. The project consists of Python Flask backend servers that interface with Windows `netsh` commands and serve a web-based UI for visualization.
+Wi-Fi Channel Analyzer & Optimizer - A cross-platform web application that scans nearby wireless networks, analyzes channel congestion, and recommends optimal Wi-Fi channels to minimize interference.
 
-## Running the Application
-
-### Prerequisites
-- **Windows OS required** - The application uses Windows-specific `netsh` commands
-- **Administrator privileges** - Required for `netsh wlan` commands to work
-- Python 3.x with Flask installed
-- Must run from Administrator PowerShell or CMD
-
-### Running the Server
-
-```bash
-# Run the main server (includes embedded HTML UI)
-python wifi_server.py
-
-# Alternative server implementations
-python wifi_server2.py
-python wifi_tool_server.py
-
-# Command-line only version with matplotlib visualization
-python Scan_pywifi.py
-```
-
-Access the web UI at: `http://127.0.0.1:5000`
+**Key Features:**
+- Real-time Wi-Fi network scanning across Windows, macOS, and Linux
+- Channel congestion analysis for 2.4GHz and 5GHz bands
+- Web-based UI with interactive data visualization
+- Channel recommendation algorithm based on AP distribution
 
 ## Architecture
 
-### Core Components
+### System Design
 
-1. **Flask Web Servers** (`wifi_server.py`, `wifi_server2.py`, `wifi_tool_server.py`)
-   - Serve web UI and REST API endpoints
-   - Execute Windows netsh commands via subprocess
-   - Parse netsh output for Wi-Fi network data
-   - Calculate channel recommendations
+```
+┌─────────────────┐
+│   Web Browser   │  (Frontend: Vanilla JS + Chart.js)
+│   localhost     │
+└────────┬────────┘
+         │ HTTP REST API
+         ▼
+┌─────────────────┐
+│  Node.js Server │  (Express.js on port 5000)
+│  backend/src/   │
+└────────┬────────┘
+         │ child_process.spawn()
+         ▼
+┌─────────────────┐
+│ Python Scanner  │  (Platform-specific CLI commands)
+│ wifi_scanner.py │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  OS Commands    │  (netsh/airport/nmcli)
+└─────────────────┘
+```
 
-2. **Wi-Fi Scanning Logic**
-   - Uses `netsh wlan show networks interface="<name>" mode=bssid` command
-   - Parses output for SSID, channel number, and signal strength
-   - Handles Korean (cp949) and English locale outputs
-   - Returns list of tuples: `(ssid, channel, signal_strength)`
+### Technology Stack
 
-3. **Channel Recommendation Algorithm**
-   - Counts AP occurrences per channel using Counter
-   - Considers non-overlapping channels: 1, 6, 11 (2.4GHz) and 36, 40, 44, 48, 149, 153, 157, 161 (5GHz)
-   - Recommends channel with minimum AP count from candidate list
+**Backend:**
+- Node.js + Express.js (REST API server)
+- Python 3 (Wi-Fi scanning utility)
+- `child_process` module (Python script execution)
 
-4. **Web UI** (`wifi.html`)
-   - Modern, responsive single-page interface
-   - Real-time channel congestion visualization
-   - Bar chart showing AP distribution across channels
-   - Korean language interface
+**Frontend:**
+- Vanilla JavaScript (no frameworks)
+- HTML5 + CSS3 (responsive design)
+- Chart.js (data visualization)
 
-### File Descriptions
+**Data Flow:**
+1. User clicks scan button in browser
+2. Frontend `fetch()` calls `/api/scan`
+3. Express server spawns Python subprocess
+4. Python executes platform-specific system commands
+5. Python parses output and returns JSON
+6. Node.js forwards JSON to frontend
+7. Frontend renders chart and table
 
-- **wifi_server.py** - Main server with HTML embedded in Python string
-- **wifi_server2.py** - Alternative server with auto-detection of network interface name (has a syntax error on line 169: `최고` should be `best`)
-- **wifi_tool_server.py** - Simpler implementation with embedded HTML
-- **Scan_pywifi.py** - CLI-only version with matplotlib graphing
-- **wifi.html** - Standalone HTML/CSS/JS frontend
+## Commands
 
-## API Endpoints
+### Development
 
-### `GET /`
-Returns the web UI (HTML page)
+```bash
+# Install dependencies
+cd backend
+npm install
 
-### `GET /scan`
-Scans Wi-Fi networks and returns JSON:
+# Start server (production mode)
+npm start
+
+# Start server (development mode with auto-restart)
+npm run dev
+```
+
+Server runs on `http://localhost:5000`
+
+### Testing the Scanner Directly
+
+```bash
+# Test Python scanner independently
+python3 backend/src/wifi_scanner.py
+
+# Windows
+python backend/src/wifi_scanner.py
+
+# Output should be valid JSON
+```
+
+### Platform Requirements
+
+**Windows:**
+- Must run with Administrator privileges
+- Uses `netsh wlan show networks` command
+
+**macOS:**
+- Regular user privileges sufficient
+- Uses `/System/Library/PrivateFrameworks/Apple80211.framework/.../airport -s`
+
+**Linux:**
+- Regular user privileges sufficient
+- Uses `nmcli -f SSID,CHAN,SIGNAL dev wifi`
+
+## Code Architecture
+
+### Backend: Node.js Server (`backend/src/server.js`)
+
+**Key Endpoints:**
+- `GET /` - Serves frontend HTML
+- `GET /api/health` - Health check (returns platform info)
+- `GET /api/scan` - Triggers Wi-Fi scan, returns JSON results
+- `GET /api/debug` - System debugging information
+
+**Process Communication:**
+The server uses `spawn()` to execute Python as a child process:
+```javascript
+const pythonProcess = spawn(pythonCommand, [pythonScript]);
+// Collects stdout as JSON
+// Handles stderr for errors
+```
+
+**Important:** The Python command differs by platform:
+- Windows: `python`
+- macOS/Linux: `python3`
+
+### Backend: Python Scanner (`backend/src/wifi_scanner.py`)
+
+**Platform Detection:**
+Automatically detects OS using `sys.platform` and calls appropriate scanner function.
+
+**Platform-Specific Implementations:**
+
+1. **Windows (`scan_networks_windows`)**:
+   - Command: `netsh wlan show networks interface="Wi-Fi" mode=bssid`
+   - Encoding: cp949 (Korean Windows) with UTF-8 fallback
+   - Parses SSID, Channel, Signal from structured output
+
+2. **macOS (`scan_networks_macos`)**:
+   - Command: `airport -s`
+   - Encoding: UTF-8
+   - Parses space-separated tabular output
+
+3. **Linux (`scan_networks_linux`)**:
+   - Command: `nmcli -f SSID,CHAN,SIGNAL dev wifi`
+   - Encoding: UTF-8
+   - Parses NetworkManager output
+
+**Output Format:**
 ```json
 {
   "networks": [
     {"ssid": "NetworkName", "channel": 6, "signal": 75}
   ],
-  "channel_usage": {"1": 2, "6": 5, "11": 3},
-  "recommended": 1,
-  "predicted": "20%"
+  "channel_usage": {"6": 2, "11": 1},
+  "recommended": 11,
+  "predicted": "15%"
 }
 ```
 
-### `GET /debug_netsh` (wifi_server2.py only)
-Returns raw netsh output for debugging interface detection issues
+### Channel Recommendation Algorithm
 
-## Key Implementation Details
+Located in `recommend_channel()` function:
 
-### Windows Interface Name Detection
+**Logic:**
+1. Count APs per channel using `Counter`
+2. Determine band (2.4GHz if max channel ≤ 14, else 5GHz)
+3. Define non-overlapping candidates:
+   - **2.4GHz**: channels 1, 6, 11
+   - **5GHz**: channels 36, 40, 44, 48, 149, 153, 157, 161
+4. Return channel with minimum AP count
 
-The network interface name varies by Windows locale:
-- English: `"Wi-Fi"` or `"Wireless Network Connection"`
-- Korean: `"Wi-Fi"` or `"무선 LAN"` or `"무선 네트워크 연결"`
+**Why these channels?**
+- 2.4GHz channels 1, 6, 11 don't overlap (each uses ~22MHz bandwidth)
+- 5GHz channels selected avoid DFS (Dynamic Frequency Selection) restrictions
 
-`wifi_server2.py` includes automatic detection logic that:
-1. Tests the preferred interface name
-2. Falls back to parsing `netsh wlan show interfaces` output
-3. Validates the detected interface by attempting a scan
+### Frontend Architecture
 
-### netsh Output Parsing
+**File Structure:**
+```
+frontend/
+├── index.html          # Main UI structure
+├── css/style.css       # Styling (CSS variables, responsive design)
+└── js/app.js           # Application logic
+```
 
-The parsing logic handles variations in netsh output format:
-- Multiple SSID formats: `"SSID 1 : name"` or `"SSID : name"`
-- Bilingual field names: `"Channel"/"채널"`, `"Signal"/"신호"`
-- cp949 encoding for Korean Windows
-- BSSID lines are explicitly excluded from SSID detection
+**Key JavaScript Functions:**
 
-### Subprocess Execution
+- `init()` - Initializes app, attaches event listeners
+- `checkBackendHealth()` - Verifies server connectivity on load
+- `handleScanClick()` - Triggers scan via `/api/scan`
+- `displayResults(data)` - Updates UI with scan results
+- `updateChart()` - Renders Chart.js bar chart
+- `updateNetworksTable()` - Populates network list table
 
-All servers use `subprocess.check_output()` with:
-- `shell=True` for convenience on Windows
-- `stderr=subprocess.DEVNULL` to suppress error messages
-- Try-catch blocks returning empty lists on failure
-- cp949 decoding with error="ignore" fallback
+**State Management:**
+Single global variable `chartInstance` holds Chart.js instance (destroyed/recreated on each scan).
 
-## Known Issues
+**API Communication:**
+Uses `fetch()` API with `async/await` pattern. No external HTTP library needed.
 
-1. **wifi_server2.py line 169**: Variable name bug - `최고` (Korean) should be `best`
-2. **Security**: `shell=True` in subprocess calls could be a security risk if user input is incorporated
-3. **Platform limitation**: Only works on Windows due to netsh dependency
-4. **Permissions**: Requires administrator privileges to run netsh commands
+## Important Implementation Details
 
-## Development Notes
+### Encoding Handling (Windows)
 
-- The UI uses inline styles with CSS custom properties for theming
-- JavaScript fetches from `/scan` endpoint and dynamically renders bar charts
-- Signal strength is sometimes inverted to represent congestion percentage
-- The "채널 적용" (Apply Channel) button is simulation-only and doesn't actually change router settings
+Korean Windows uses cp949 encoding for console output. The Python scanner handles this:
+
+```python
+output.decode('cp949', errors='ignore')
+```
+
+If working on Windows parsing logic, ensure both Korean and English field names are supported:
+- "SSID 1" / "SSID번호"
+- "Channel" / "채널"
+- "Signal" / "신호"
+
+### Static File Serving
+
+Express serves the entire `frontend/` directory as static files:
+
+```javascript
+app.use(express.static(path.join(__dirname, '../../frontend')));
+```
+
+CSS and JS files are loaded via relative paths in `index.html`:
+- `<link rel="stylesheet" href="css/style.css">`
+- `<script src="js/app.js"></script>`
+
+### CORS Configuration
+
+CORS is enabled for all origins during development:
+
+```javascript
+app.use(cors());
+```
+
+For production deployment, restrict CORS to specific origins.
+
+### Subprocess Security
+
+The Python script is executed without user input in the command:
+
+```javascript
+spawn(pythonCommand, [pythonScript]);
+```
+
+**Important:** Never incorporate user input into subprocess commands. Current implementation is safe as no user data reaches `spawn()`.
+
+## Common Pitfalls
+
+### Python Not Found Error
+
+**Symptom:** "Failed to start Python process" or "ENOENT"
+
+**Cause:** Python not in PATH or wrong command name
+
+**Solution:** Modify `pythonCommand` detection in `server.js:39`:
+```javascript
+const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+```
+
+### Empty Scan Results on Windows
+
+**Symptom:** `networks: []` returned despite nearby networks
+
+**Cause:** Server not running with Administrator privileges
+
+**Solution:** Start command prompt/PowerShell as Administrator before `npm start`
+
+### Chart Not Rendering
+
+**Symptom:** No chart displays, console shows Chart.js errors
+
+**Cause:** Chart.js CDN not loaded (offline or network issue)
+
+**Solution:** Check browser console. Consider downloading Chart.js locally for offline use.
+
+### Interface Name Issues (Windows)
+
+**Symptom:** Empty results on non-English Windows
+
+**Cause:** Hardcoded interface name "Wi-Fi" doesn't match system language
+
+**Current Implementation:** Fixed to "Wi-Fi" which works on most systems
+
+**Enhancement:** Could auto-detect interface name by parsing `netsh wlan show interfaces`
+
+## Debugging
+
+### Backend Debugging
+
+```bash
+# Check server logs in console
+cd backend
+npm start
+# Logs will show Python stdout/stderr
+
+# Test endpoints manually
+curl http://localhost:5000/api/health
+curl http://localhost:5000/api/scan
+curl http://localhost:5000/api/debug
+```
+
+### Python Debugging
+
+```bash
+# Run scanner directly to see raw output
+python3 backend/src/wifi_scanner.py
+
+# Check if JSON is valid
+python3 backend/src/wifi_scanner.py | python3 -m json.tool
+```
+
+### Frontend Debugging
+
+Open browser console and use exposed debug functions:
+
+```javascript
+// Check API endpoints
+console.log(WifiAnalyzer.API_ENDPOINTS);
+
+// Trigger health check
+WifiAnalyzer.checkHealth();
+
+// Trigger scan
+WifiAnalyzer.scan();
+```
+
+## File Paths and Structure
+
+```
+network_project/
+├── backend/
+│   ├── package.json           # Node.js dependencies and scripts
+│   └── src/
+│       ├── server.js          # Express server (165 lines)
+│       └── wifi_scanner.py    # Python scanner (280+ lines)
+└── frontend/
+    ├── index.html             # UI structure
+    ├── css/
+    │   └── style.css          # Responsive design with CSS variables
+    └── js/
+        └── app.js             # Frontend logic with Chart.js integration
+```
+
+**Path Resolution:**
+Backend uses `path.join(__dirname, '../../frontend')` to serve static files from parent directory.
+
+## Code Style
+
+**JavaScript:**
+- ES6+ syntax (arrow functions, async/await, template literals)
+- 2-space indentation
+- camelCase for functions and variables
+- UPPER_SNAKE_CASE for constants
+
+**Python:**
+- 4-space indentation
+- snake_case naming
+- Docstrings for all functions
+- Type hints not currently used (could be added)
+
+**CSS:**
+- CSS custom properties (variables) for theming
+- BEM-like naming conventions (e.g., `.card-title`)
+- Mobile-first responsive design with `@media` queries
+
+## Extension Points
+
+### Adding New Platforms
+
+To add support for a new OS:
+
+1. Add detection in `detect_platform()` in `wifi_scanner.py`
+2. Implement `scan_networks_<platform>()` function
+3. Return list of `(ssid, channel, signal)` tuples
+4. Add to `scan_networks()` dispatcher
+
+### Adding New API Endpoints
+
+1. Add route in `server.js` using `app.get()` or `app.post()`
+2. Return JSON with appropriate HTTP status codes
+3. Add endpoint to `API_ENDPOINTS` in `frontend/js/app.js`
+4. Implement frontend handler function
+
+### Modifying Channel Recommendation Logic
+
+Edit `recommend_channel()` in `wifi_scanner.py`. Current algorithm is simple (minimum AP count). Could enhance with:
+- Signal strength weighting
+- Channel overlap calculation
+- Historical congestion data
+- DFS channel avoidance
+
+## Known Limitations
+
+1. **Administrator Requirements (Windows)**: Cannot be bypassed - OS security requirement
+2. **Single Concurrent Scan**: Only one scan can run at a time (no queue mechanism)
+3. **CDN Dependency**: Chart.js loaded from CDN - requires internet connection
+4. **No Persistence**: Scan results not saved - purely in-memory
+5. **Fixed Interface Name**: Windows version uses hardcoded "Wi-Fi" interface name
+
+## Production Deployment
+
+**Do NOT use in production as-is.** Flask development server and lack of security hardening make this unsuitable for production. Required changes:
+
+1. Use production WSGI server (e.g., Gunicorn, uWSGI)
+2. Restrict CORS to specific origins
+3. Add rate limiting (e.g., express-rate-limit)
+4. Add authentication if exposed externally
+5. Use HTTPS with proper certificates
+6. Add request validation and sanitization
+7. Implement proper logging (e.g., Winston)
+8. Add monitoring and alerting
+9. Consider containerization (Docker)
+
+---
+
+**Last Updated:** 2025-10-13
+**Architecture:** Node.js + Python + Vanilla JavaScript
+**Language:** Korean (UI), English (code/comments)

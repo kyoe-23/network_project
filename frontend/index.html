@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wi-Fi 채널 분석기 & 최적화 도구</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>Wi-Fi 채널 분석기 & 최적화 도구</h1>
+            <p class="subtitle">주변 무선 네트워크를 스캔하여 최적의 채널을 찾아드립니다</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Control Panel -->
+            <section class="control-panel">
+                <button id="scanButton" class="scan-button">
+                    <span class="button-icon">🔍</span>
+                    <span class="button-text">스캔 시작</span>
+                </button>
+                <div id="statusMessage" class="status-message"></div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <!-- Recommendation Card -->
+                <div class="card recommendation-card">
+                    <h2 class="card-title">추천 채널</h2>
+                    <div class="recommendation-content">
+                        <div class="recommended-channel">
+                            <span class="channel-label">채널</span>
+                            <span id="recommendedChannel" class="channel-number">-</span>
+                        </div>
+                        <div class="congestion-info">
+                            <span class="congestion-label">예상 혼잡도</span>
+                            <span id="predictedCongestion" class="congestion-value">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistics Card -->
+                <div class="card statistics-card">
+                    <h2 class="card-title">스캔 통계</h2>
+                    <div class="statistics-grid">
+                        <div class="stat-item">
+                            <span class="stat-label">발견된 네트워크</span>
+                            <span id="totalNetworks" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">사용 중인 채널</span>
+                            <span id="activeChannels" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">2.4GHz 네트워크</span>
+                            <span id="networks24ghz" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">5GHz 네트워크</span>
+                            <span id="networks5ghz" class="stat-value">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart Card -->
+                <div class="card chart-card">
+                    <h2 class="card-title">채널별 AP 분포</h2>
+                    <div class="chart-container">
+                        <canvas id="channelChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Networks Table Card -->
+                <div class="card networks-card">
+                    <h2 class="card-title">발견된 네트워크 목록</h2>
+                    <div class="table-container">
+                        <table id="networksTable" class="networks-table">
+                            <thead>
+                                <tr>
+                                    <th>SSID</th>
+                                    <th>채널</th>
+                                    <th>신호 강도</th>
+                                    <th>대역</th>
+                                </tr>
+                            </thead>
+                            <tbody id="networksTableBody">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Loading Overlay -->
+            <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+                <div class="spinner"></div>
+                <p class="loading-text">스캔 중...</p>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>&copy; 2025 Wi-Fi Channel Analyzer | 최적의 네트워크 환경을 위한 도구</p>
+        </footer>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="js/app.js"></script>
+</body>
+</html>
