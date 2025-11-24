@@ -26,7 +26,9 @@ const elements = {
   networks24ghz: document.getElementById('networks24ghz'),
   networks5ghz: document.getElementById('networks5ghz'),
   networksTableBody: document.getElementById('networksTableBody'),
-  channelChart: document.getElementById('channelChart')
+  channelChart: document.getElementById('channelChart'),
+  recommendedListBody: document.getElementById('recommendedListBody'),
+  recommendationDescription: document.getElementById('recommendationDescription')
 };
 
 /**
@@ -52,7 +54,7 @@ async function checkBackendHealth() {
     const response = await fetch(API_ENDPOINTS.health);
     const data = await response.json();
     console.log('Backend health check:', data);
-    showStatus('준비 완료 - 스캔 버튼을 클릭하세요', 'success');
+    showStatus('PUSH BUTTON', 'success');
   } catch (error) {
     console.error('Backend health check failed:', error);
     showStatus('서버 연결 실패 - 백엔드가 실행 중인지 확인하세요', 'error');
@@ -87,11 +89,11 @@ async function handleScanClick() {
 
     // Process and display results
     displayResults(data);
-    showStatus('스캔 완료!', 'success');
+    showStatus('Scan Success', 'success');
 
   } catch (error) {
     console.error('Scan failed:', error);
-    showStatus(`스캔 실패: ${error.message}`, 'error');
+    showStatus(`Scan Failed: ${error.message}`, 'error');
 
   } finally {
     setLoading(false);
@@ -102,7 +104,7 @@ async function handleScanClick() {
  * Display scan results
  */
 function displayResults(data) {
-  const { networks, channel_usage, recommended, predicted } = data;
+  const { networks, channel_usage, recommended, predicted, recommended_list, recommended_networks } = data;
 
   // Show results section with animation
   elements.resultsSection.style.display = 'block';
@@ -112,6 +114,9 @@ function displayResults(data) {
   elements.recommendedChannel.textContent = recommended || '-';
   elements.predictedCongestion.textContent = predicted || 'N/A';
 
+  // Update recommendation description
+  updateRecommendationDescription(recommended, recommended_networks, channel_usage);
+
   // Calculate statistics
   const stats = calculateStatistics(networks);
   elements.totalNetworks.textContent = stats.total;
@@ -120,10 +125,48 @@ function displayResults(data) {
   elements.networks5ghz.textContent = stats.networks5ghz;
 
   // Update chart
-  updateChart(channel_usage, recommended);
+  updateChart(networks);
+
+  // Update recommended channels list
+  updateRecommendedList(recommended_list);
 
   // Update networks table
   updateNetworksTable(networks);
+}
+
+/**
+ * Update recommendation description
+ */
+function updateRecommendationDescription(recommended, recommendedNetworks, channelUsage) {
+  if (!recommended) {
+    elements.recommendationDescription.innerHTML = '';
+    return;
+  }
+
+  const apCount = channelUsage[recommended] || 0;
+  const band = recommended <= 14 ? '2.4GHz' : '5GHz';
+
+  let description = '';
+
+  if (apCount === 0) {
+    description = `
+      <p class="desc-main">이 채널을 사용하는 네트워크가 없습니다.</p>
+      <p class="desc-detail">→ 간섭이 없어 <strong>최적의 채널</strong>입니다.</p>
+    `;
+  } else {
+    const networkList = recommendedNetworks.slice(0, 5).join(', ');
+    const moreCount = recommendedNetworks.length > 5 ? ` 외 ${recommendedNetworks.length - 5}개` : '';
+
+    description = `
+      <p class="desc-main">이 채널을 사용하는 네트워크 (${apCount}개):</p>
+      <p class="desc-networks">${networkList}${moreCount}</p>
+      <p class="desc-detail">→ 다른 채널보다 혼잡도가 낮아 추천됩니다.</p>
+    `;
+  }
+
+  description += `<p class="desc-band">${band} 대역 | 채널 ${recommended}</p>`;
+
+  elements.recommendationDescription.innerHTML = description;
 }
 
 /**
@@ -155,9 +198,9 @@ function calculateStatistics(networks) {
 }
 
 /**
- * Update channel distribution chart
+ * Update network signal strength chart
  */
-function updateChart(channelUsage, recommendedChannel) {
+function updateChart(networks) {
   const ctx = elements.channelChart.getContext('2d');
 
   // Destroy existing chart if present
@@ -165,30 +208,37 @@ function updateChart(channelUsage, recommendedChannel) {
     chartInstance.destroy();
   }
 
+  // Sort networks by signal strength (descending)
+  const sortedNetworks = [...networks].sort((a, b) => b.signal - a.signal);
+
   // Prepare data
-  const channels = Object.keys(channelUsage).map(Number).sort((a, b) => a - b);
-  const counts = channels.map(ch => channelUsage[ch]);
+  const labels = sortedNetworks.map(n => n.ssid || '(숨김)');
+  const signals = sortedNetworks.map(n => n.signal);
 
-  // Color bars based on recommended channel
-  const backgroundColors = channels.map(ch =>
-    ch === recommendedChannel ? 'rgba(16, 185, 129, 0.8)' : 'rgba(79, 70, 229, 0.6)'
-  );
+  // Color bars based on signal strength
+  const backgroundColors = signals.map(signal => {
+    if (signal >= 70) return 'rgba(34, 197, 94, 0.7)';
+    if (signal >= 40) return 'rgba(234, 179, 8, 0.7)';
+    return 'rgba(239, 68, 68, 0.7)';
+  });
 
-  const borderColors = channels.map(ch =>
-    ch === recommendedChannel ? 'rgba(16, 185, 129, 1)' : 'rgba(79, 70, 229, 1)'
-  );
+  const borderColors = signals.map(signal => {
+    if (signal >= 70) return 'rgba(34, 197, 94, 1)';
+    if (signal >= 40) return 'rgba(234, 179, 8, 1)';
+    return 'rgba(239, 68, 68, 1)';
+  });
 
   // Create chart
   chartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: channels.map(ch => `채널 ${ch}`),
+      labels: labels,
       datasets: [{
-        label: 'AP 개수',
-        data: counts,
+        label: '신호 강도',
+        data: signals,
         backgroundColor: backgroundColors,
         borderColor: borderColors,
-        borderWidth: 2
+        borderWidth: 1
       }]
     },
     options: {
@@ -201,10 +251,8 @@ function updateChart(channelUsage, recommendedChannel) {
         tooltip: {
           callbacks: {
             label: function(context) {
-              const channel = channels[context.dataIndex];
-              const count = context.parsed.y;
-              const isRecommended = channel === recommendedChannel;
-              return `${count}개 AP${isRecommended ? ' (추천)' : ''}`;
+              const network = sortedNetworks[context.dataIndex];
+              return `${context.parsed.y}% (채널 ${network.channel})`;
             }
           }
         }
@@ -212,24 +260,88 @@ function updateChart(channelUsage, recommendedChannel) {
       scales: {
         y: {
           beginAtZero: true,
-          ticks: {
-            stepSize: 1,
-            precision: 0
-          },
+          max: 100,
           title: {
             display: true,
-            text: 'AP 개수'
+            text: '신호 강도 (%)'
           }
         },
         x: {
           title: {
             display: true,
-            text: '채널'
+            text: '네트워크'
           }
         }
       }
     }
   });
+}
+
+/**
+ * Update recommended channels list
+ */
+function updateRecommendedList(recommendedList) {
+  // Clear existing rows
+  elements.recommendedListBody.innerHTML = '';
+
+  if (!recommendedList || recommendedList.length === 0) {
+    return;
+  }
+
+  // Populate table
+  recommendedList.forEach(item => {
+    const row = document.createElement('tr');
+
+    // Highlight best recommendation
+    if (item.rank === 1) {
+      row.className = 'best-recommendation';
+    }
+
+    // Rank
+    const rankCell = document.createElement('td');
+    rankCell.textContent = item.rank;
+    rankCell.className = 'rank-cell';
+    row.appendChild(rankCell);
+
+    // Channel
+    const channelCell = document.createElement('td');
+    channelCell.textContent = `채널 ${item.channel}`;
+    channelCell.className = 'channel-cell';
+    row.appendChild(channelCell);
+
+    // AP Count
+    const apCountCell = document.createElement('td');
+    apCountCell.textContent = `${item.ap_count}개`;
+    row.appendChild(apCountCell);
+
+    // Congestion
+    const congestionCell = document.createElement('td');
+    congestionCell.textContent = item.congestion;
+    row.appendChild(congestionCell);
+
+    // Grade
+    const gradeCell = document.createElement('td');
+    const gradeSpan = document.createElement('span');
+    gradeSpan.textContent = item.grade;
+    gradeSpan.className = `grade-badge grade-${getGradeClass(item.grade)}`;
+    gradeCell.appendChild(gradeSpan);
+    row.appendChild(gradeCell);
+
+    elements.recommendedListBody.appendChild(row);
+  });
+}
+
+/**
+ * Get CSS class based on grade
+ */
+function getGradeClass(grade) {
+  switch (grade) {
+    case '최적': return 'optimal';
+    case '양호': return 'good';
+    case '보통': return 'normal';
+    case '혼잡': return 'congested';
+    default: return 'normal';
+  }
 }
 
 /**

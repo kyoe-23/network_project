@@ -316,6 +316,68 @@ def recommend_channel(networks):
     return best_channel
 
 
+def get_recommended_channels_list(networks):
+    """
+    Get a ranked list of recommended channels based on AP distribution
+
+    Args:
+        networks (list): List of tuples (ssid, channel, signal)
+
+    Returns:
+        list: List of channel recommendations with details
+    """
+    if not networks:
+        return []
+
+    # Count APs per channel
+    channel_counter = Counter(channel for _, channel, _ in networks)
+    total_aps = len(networks)
+
+    # Determine band and candidates
+    channels = [ch for _, ch, _ in networks]
+    max_channel = max(channels) if channels else 0
+
+    if max_channel <= 14:  # 2.4GHz band
+        candidates = [1, 6, 11]
+        band = "2.4GHz"
+    else:  # 5GHz band
+        candidates = [36, 40, 44, 48, 149, 153, 157, 161]
+        band = "5GHz"
+
+    # Build recommendation list with details
+    recommendations = []
+    for channel in candidates:
+        ap_count = channel_counter.get(channel, 0)
+        congestion = int((ap_count / total_aps) * 100) if total_aps > 0 else 0
+
+        # Determine recommendation grade
+        if ap_count == 0:
+            grade = "최적"
+        elif congestion <= 10:
+            grade = "양호"
+        elif congestion <= 25:
+            grade = "보통"
+        else:
+            grade = "혼잡"
+
+        recommendations.append({
+            "channel": channel,
+            "ap_count": ap_count,
+            "congestion": f"{congestion}%",
+            "grade": grade,
+            "band": band
+        })
+
+    # Sort by AP count (ascending) - less APs = better recommendation
+    recommendations.sort(key=lambda x: x["ap_count"])
+
+    # Add rank
+    for i, rec in enumerate(recommendations):
+        rec["rank"] = i + 1
+
+    return recommendations
+
+
 def calculate_channel_usage(networks):
     """
     Calculate channel usage statistics
@@ -365,6 +427,7 @@ def main():
         networks = scan_networks()
     channel_usage = calculate_channel_usage(networks)
     recommended = recommend_channel(networks)
+    recommended_list = get_recommended_channels_list(networks)
 
     # Calculate predicted congestion
     total_aps = len(networks)
@@ -374,6 +437,13 @@ def main():
         predicted = f"{int((best_channel_aps / total_aps) * 100)}%"
     else:
         predicted = "N/A"
+
+    # Get networks using the recommended channel
+    recommended_networks = [
+        ssid if ssid else "(숨겨진 네트워크)"
+        for ssid, channel, _ in networks
+        if channel == recommended
+    ]
 
     # Format output
     result = {
@@ -387,6 +457,8 @@ def main():
         ],
         "channel_usage": channel_usage,
         "recommended": recommended,
+        "recommended_networks": recommended_networks,
+        "recommended_list": recommended_list,
         "predicted": predicted,
         "total_networks": total_aps,
         "platform": detect_platform()
