@@ -463,20 +463,6 @@ curl -o lib/chart.js https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.
 - **CSS3** - CSS Grid, Flexbox, 커스텀 속성
 - **Chart.js** - 데이터 시각화 라이브러리
 
-## 라이선스
-
-MIT License
-
-## 기여
-
-버그 리포트 및 기능 제안은 이슈 트래커를 통해 제출해 주세요.
-
-자세한 개발 가이드는 [CLAUDE.md](CLAUDE.md)를 참조하세요.
-
-## 문의
-
-프로젝트 관련 문의사항은 GitHub 이슈를 이용해 주세요.
-
 ---
 
 **마지막 업데이트:** 2025-10-13
