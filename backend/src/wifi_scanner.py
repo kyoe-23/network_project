@@ -12,9 +12,10 @@ import os
 import io
 from collections import Counter
 
+# 윈도우 폰트 깨짐 방지 조건
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
-    
+
 def detect_platform():
     """Detect the operating system platform"""
     if sys.platform == "win32":
