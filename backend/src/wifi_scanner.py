@@ -9,9 +9,12 @@ import subprocess
 import json
 import sys
 import os
+import io
 from collections import Counter
 
-
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
+    
 def detect_platform():
     """Detect the operating system platform"""
     if sys.platform == "win32":
